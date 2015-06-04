@@ -58,6 +58,17 @@
         constructor: ExportData,
         notify: function (e) {
             var self = this;
+
+            if (self.isTooMuchData) {
+                if (confirm(self.messages.tooMuchData)) {
+                    self.$form.find('[name="background"]').val(1);
+                    e.preventDefault();
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+
             if (!self.showConfirmAlert) {
                 e.preventDefault();
                 return true;
@@ -162,6 +173,7 @@
         target: '_popup',
         showConfirmAlert: true,
         columnSelectorId: null,
+        isTooMuchData:false,
         alertMsg: '',
         settings: {
             formId: '',
@@ -169,7 +181,8 @@
                 allowPopups: '',
                 confirmDownload: '',
                 downloadProgress: '',
-                downloadComplete: ''
+                downloadComplete: '',
+                tooMuchData: ''
             }
         }
     };

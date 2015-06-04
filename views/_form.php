@@ -15,6 +15,7 @@
 use yii\helpers\Html;
 
 echo Html::beginForm('', 'post', $options);
+echo Html::hiddenInput($exportBackgroundParam, 0);
 echo Html::hiddenInput($exportTypeParam, $exportType);
 echo Html::hiddenInput($exportRequestParam, 1);
 echo Html::hiddenInput($exportColsParam, '');

@@ -62,6 +62,7 @@ class ExportMenu extends GridView
     /**
      * Input parameters from export form
      */
+    const PARAM_EXPORT_BACKGROUND = 'background';
     const PARAM_EXPORT_TYPE = 'export_type';
     const PARAM_EXPORT_COLS = 'export_columns';
     const PARAM_COLSEL_FLAG = 'column_selector_enabled';
@@ -399,6 +400,9 @@ class ExportMenu extends GridView
      */
     public $i18n = [];
 
+    public $maxDownloadedCount = 100;
+
+
     /**
      * @var string translation message file category name for i18n
      */
@@ -414,6 +418,8 @@ class ExportMenu extends GridView
      * `ExportMenu::FORMAT_EXCEL_X`.
      */
     private $_exportType = self::FORMAT_EXCEL_X;
+
+    private $_isBackgrounded = false;
 
     /**
      * @var array the default export configuration
@@ -514,9 +520,12 @@ class ExportMenu extends GridView
     public function init()
     {
         $this->_columnSelectorEnabled = $this->showColumnSelector && $this->asDropdown;
+        if (isset($_POST[self::PARAM_EXPORT_BACKGROUND])) {
+            $this->_isBackgrounded = $_POST[self::PARAM_EXPORT_BACKGROUND];
+        }
         $this->_triggerDownload = !empty($_POST) &&
             !empty($_POST[$this->exportRequestParam]) &&
-            $_POST[$this->exportRequestParam];
+            $_POST[$this->exportRequestParam] && !$this->_isBackgrounded;
         if ($this->_triggerDownload) {
             Yii::$app->controller->layout = false;
             $this->_exportType = $_POST[self::PARAM_EXPORT_TYPE];
@@ -550,11 +559,16 @@ class ExportMenu extends GridView
         $this->initColumnSelector();
         $this->setVisibleColumns();
         $this->initExport();
+        if ($this->_isBackgrounded) {
+            Yii::$app->session->setFlash('success', Yii::t('kvexport', 'exported data will be available soon.'));
+            //Yii::$app->response->redirect(Yii::$app->request->absoluteUrl);
+        }
         if (!$this->_triggerDownload) {
             $this->registerAssets();
             echo $this->renderExportMenu();
             return;
         }
+
         $this->clearOutputBuffers();
         $config = ArrayHelper::getValue($this->exportConfig, $this->_exportType, []);
         if (empty($config)) {
@@ -569,6 +583,7 @@ class ExportMenu extends GridView
                 throw new InvalidConfigException("The pdf rendering library '{$this->pdfLibrary}' was not found or installed at path '{$path}'.");
             }
         }
+
         $this->initPHPExcel();
         $this->initPHPExcelWriter($config['writer']);
         $this->initPHPExcelSheet();
@@ -813,6 +828,7 @@ class ExportMenu extends GridView
             'downloadProgress' => Yii::t('kvexport', 'Generating the export file. Please wait...'),
             'downloadComplete' => Yii::t('kvexport',
                 'Request submitted! You may safely close this dialog after saving your downloaded file.'),
+            'tooMuchData' => Yii::t('kvexport', 'You try to get too much data, do you want get it in background?')
         ];
         $formId = $this->exportFormOptions['id'];
         $options = Json::encode([
@@ -831,7 +847,8 @@ class ExportMenu extends GridView
                 'settings' => new JsExpression($menu),
                 'alertMsg' => $setting['alertMsg'],
                 'target' => $this->target,
-                'showConfirmAlert' => $this->showConfirmAlert
+                'showConfirmAlert' => $this->showConfirmAlert,
+                'isTooMuchData' => ($this->maxDownloadedCount <= $this->dataProvider->getTotalCount()) ?: false
             ];
             if ($this->_columnSelectorEnabled) {
                 $options['columnSelectorId'] = $this->columnSelectorOptions['id'];
@@ -897,6 +914,7 @@ class ExportMenu extends GridView
             'exportType' => $this->_exportType,
             'columnSelectorEnabled' => $this->_columnSelectorEnabled,
             'exportRequestParam' => $this->exportRequestParam,
+            'exportBackgroundParam' => self::PARAM_EXPORT_BACKGROUND,
             'exportTypeParam' => self::PARAM_EXPORT_TYPE,
             'exportColsParam' => self::PARAM_EXPORT_COLS,
             'colselFlagParam' => self::PARAM_COLSEL_FLAG,
