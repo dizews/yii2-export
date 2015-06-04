@@ -402,6 +402,8 @@ class ExportMenu extends GridView
 
     public $maxDownloadedCount = 100;
 
+    public $backgroundClass;
+
 
     /**
      * @var string translation message file category name for i18n
@@ -560,7 +562,12 @@ class ExportMenu extends GridView
         $this->setVisibleColumns();
         $this->initExport();
         if ($this->_isBackgrounded) {
-            Yii::$app->session->setFlash('success', Yii::t('kvexport', 'exported data will be available soon.'));
+            $class = $this->backgroundClass;
+            if ($class::postpone($this, Yii::$app->request->getQueryString(), $_POST)) {
+                Yii::$app->session->setFlash('success', Yii::t('kvexport', 'exported data will be available soon.'));
+            } else {
+                Yii::$app->session->setFlash('error', Yii::t('kvexport', 'exported data error.'));
+            }
             //Yii::$app->response->redirect(Yii::$app->request->absoluteUrl);
         }
         if (!$this->_triggerDownload) {
