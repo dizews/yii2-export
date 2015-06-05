@@ -46,4 +46,5 @@ return [
     'The TEXT export file will be generated for download.' => 'Будет сгенерирован файл в формате TEXT.',
     'grid-export' => '',
     'Toggle All' => 'Выбрать все',
+    'You try to get too much data, data available only in `CSV`.' => 'Вы пытаетесь получить много данных, данные доступны только в `CSV`.'
 ];

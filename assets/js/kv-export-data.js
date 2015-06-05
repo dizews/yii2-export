@@ -59,16 +59,6 @@
         notify: function (e) {
             var self = this;
 
-            if (self.isTooMuchData) {
-                if (confirm(self.messages.tooMuchData)) {
-                    self.$form.find('[name="background"]').val(1);
-                    e.preventDefault();
-                    return true;
-                } else {
-                    return false;
-                }
-            }
-
             if (!self.showConfirmAlert) {
                 e.preventDefault();
                 return true;
@@ -78,6 +68,10 @@
                 msg2 = isEmpty(msgs.allowPopups) ? '' : msgs.allowPopups,
                 msg3 = isEmpty(msgs.confirmDownload) ? '' : msgs.confirmDownload,
                 msg = '', out;
+            if (self.isTooMuchData) {
+                msg1 = self.messages.tooMuchData;
+            }
+
             if (msg1.length && msg2.length) {
                 msg = msg1 + '\n\n' + msg2;
             } else {

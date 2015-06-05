@@ -62,7 +62,7 @@ class ExportMenu extends GridView
     /**
      * Input parameters from export form
      */
-    const PARAM_EXPORT_BACKGROUND = 'background';
+    const PARAM_EXPORT_STREAM_TYPE = 'export_stream_type';
     const PARAM_EXPORT_TYPE = 'export_type';
     const PARAM_EXPORT_COLS = 'export_columns';
     const PARAM_COLSEL_FLAG = 'column_selector_enabled';
@@ -400,10 +400,8 @@ class ExportMenu extends GridView
      */
     public $i18n = [];
 
-    public $maxDownloadedCount = 100;
-
-    public $backgroundClass;
-
+    public $maxDownloadedCount = 1000;
+    public $dowloadedPageSize = 500;
 
     /**
      * @var string translation message file category name for i18n
@@ -421,7 +419,7 @@ class ExportMenu extends GridView
      */
     private $_exportType = self::FORMAT_EXCEL_X;
 
-    private $_isBackgrounded = false;
+    private $_exportStreamType = self::FORMAT_CSV;
 
     /**
      * @var array the default export configuration
@@ -522,12 +520,12 @@ class ExportMenu extends GridView
     public function init()
     {
         $this->_columnSelectorEnabled = $this->showColumnSelector && $this->asDropdown;
-        if (isset($_POST[self::PARAM_EXPORT_BACKGROUND])) {
-            $this->_isBackgrounded = $_POST[self::PARAM_EXPORT_BACKGROUND];
+        if (isset($_POST[self::PARAM_EXPORT_STREAM_TYPE])) {
+            $this->_exportStreamType = $_POST[self::PARAM_EXPORT_STREAM_TYPE];
         }
         $this->_triggerDownload = !empty($_POST) &&
             !empty($_POST[$this->exportRequestParam]) &&
-            $_POST[$this->exportRequestParam] && !$this->_isBackgrounded;
+            $_POST[$this->exportRequestParam];
         if ($this->_triggerDownload) {
             Yii::$app->controller->layout = false;
             $this->_exportType = $_POST[self::PARAM_EXPORT_TYPE];
@@ -561,15 +559,6 @@ class ExportMenu extends GridView
         $this->initColumnSelector();
         $this->setVisibleColumns();
         $this->initExport();
-        if ($this->_isBackgrounded) {
-            $class = $this->backgroundClass;
-            if ($class::postpone($this, Yii::$app->request->getQueryString(), $_POST)) {
-                Yii::$app->session->setFlash('success', Yii::t('kvexport', 'exported data will be available soon.'));
-            } else {
-                Yii::$app->session->setFlash('error', Yii::t('kvexport', 'exported data error.'));
-            }
-            //Yii::$app->response->redirect(Yii::$app->request->absoluteUrl);
-        }
         if (!$this->_triggerDownload) {
             $this->registerAssets();
             echo $this->renderExportMenu();
@@ -591,6 +580,10 @@ class ExportMenu extends GridView
             }
         }
 
+        if ($this->maxDownloadedCount <= $this->dataProvider->getTotalCount()) {
+            $this->runCsv();
+        }
+
         $this->initPHPExcel();
         $this->initPHPExcelWriter($config['writer']);
         $this->initPHPExcelSheet();
@@ -602,6 +595,7 @@ class ExportMenu extends GridView
         if ($this->_exportType === self::FORMAT_TEXT) {
             $writer->setDelimiter("\t");
         }
+
         if ($this->autoWidth) {
             foreach ($this->getVisibleColumns() as $n => $column) {
                 $sheet->getColumnDimension(self::columnName($n + 1))->setAutoSize(true);
@@ -617,6 +611,58 @@ class ExportMenu extends GridView
             $this->destroyPHPExcel();
             exit();
         }
+    }
+
+    public function runCsv()
+    {
+        $this->_exportType = $this->_exportStreamType;
+
+        $this->clearOutputBuffers();
+        $this->setHttpHeaders();
+
+        /* @var $provider ActiveDataProvider */
+        $provider = $this->dataProvider;
+
+        $pagesCount = $provider->getTotalCount();
+        $provider->pagination->setPageSize($this->dowloadedPageSize);
+
+        //render header
+        $fout = fopen('php://output', 'wb+');
+
+        for ($page = 0; $page < $pagesCount; ++$page) {
+            $provider->pagination->setPage($page);
+
+            $provider->prepare(true);
+            $models = $provider->getModels();
+
+            foreach ($models as $model) {
+
+                $key = $model->id;
+                $result = [];
+                foreach ($this->getVisibleColumns() as $index => $column) {
+                    if ($column instanceof \yii\grid\SerialColumn || $column instanceof \kartik\grid\SerialColumn) {
+                        $value = $column->renderDataCell($model, $key, $index);
+                    } elseif ($column instanceof \yii\grid\ActionColumn) {
+                        $value = '';
+                    } else {
+                        $format = $this->enableFormatter && isset($column->format) ? $column->format : 'raw';
+                        $value = ($column->content === null) ? (method_exists($column, 'getDataCellValue') ?
+                            $this->formatter->format($column->getDataCellValue($model, $key, $index), $format) :
+                            $column->renderDataCell($model, $key, $index)) :
+                            call_user_func($column->content, $model, $key, $index, $column);
+                    }
+                    if (empty($value) && !empty($column->attribute) && $column->attribute !== null) {
+                        $value = ArrayHelper::getValue($model, $column->attribute, '');
+                    }
+                    $result[] = strip_tags($value);
+                }
+
+                fputcsv($fout, $result);
+            }
+        }
+
+        fclose($fout);
+        exit();
     }
 
     /**
@@ -835,7 +881,7 @@ class ExportMenu extends GridView
             'downloadProgress' => Yii::t('kvexport', 'Generating the export file. Please wait...'),
             'downloadComplete' => Yii::t('kvexport',
                 'Request submitted! You may safely close this dialog after saving your downloaded file.'),
-            'tooMuchData' => Yii::t('kvexport', 'You try to get too much data, do you want get it in background?')
+            'tooMuchData' => Yii::t('kvexport', 'You try to get too much data, data available only in `CSV`.')
         ];
         $formId = $this->exportFormOptions['id'];
         $options = Json::encode([
@@ -855,7 +901,7 @@ class ExportMenu extends GridView
                 'alertMsg' => $setting['alertMsg'],
                 'target' => $this->target,
                 'showConfirmAlert' => $this->showConfirmAlert,
-                'isTooMuchData' => ($this->maxDownloadedCount <= $this->dataProvider->getTotalCount()) ?: false
+                'isTooMuchData' => ($this->maxDownloadedCount <= $this->dataProvider->getTotalCount()) ? true: false
             ];
             if ($this->_columnSelectorEnabled) {
                 $options['columnSelectorId'] = $this->columnSelectorOptions['id'];
@@ -919,9 +965,10 @@ class ExportMenu extends GridView
         $form = $this->render($this->exportFormView, [
             'options' => $this->exportFormOptions,
             'exportType' => $this->_exportType,
+            'exportStreamType' => $this->_exportStreamType,
             'columnSelectorEnabled' => $this->_columnSelectorEnabled,
             'exportRequestParam' => $this->exportRequestParam,
-            'exportBackgroundParam' => self::PARAM_EXPORT_BACKGROUND,
+            'exportStreamTypeParam' => self::PARAM_EXPORT_STREAM_TYPE,
             'exportTypeParam' => self::PARAM_EXPORT_TYPE,
             'exportColsParam' => self::PARAM_EXPORT_COLS,
             'colselFlagParam' => self::PARAM_COLSEL_FLAG,
