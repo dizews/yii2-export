@@ -629,6 +629,16 @@ class ExportMenu extends GridView
         //render header
         $fout = fopen('php://output', 'wb+');
 
+        foreach ($this->getVisibleColumns() as $column) {
+            $this->_endCol++;
+            /* @var $column Column */
+            $result[] = ($column instanceof \yii\grid\DataColumn) ? $this->getColumnHeader($column) : $column->header;
+        }
+
+        if (isset($result)) {
+            fputcsv($fout, $result);
+        }
+
         for ($page = 0; $page < $pagesCount; ++$page) {
             $provider->pagination->setPage($page);
 
