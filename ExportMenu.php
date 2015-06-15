@@ -9,6 +9,8 @@
 
 namespace kartik\export;
 
+use Box\Spout\Common\Type;
+use Box\Spout\Writer\WriterFactory;
 use \Yii;
 use \PHPExcel;
 use \PHPExcel_IOFactory;
@@ -581,7 +583,14 @@ class ExportMenu extends GridView
         }
 
         if ($this->maxDownloadedCount <= $this->dataProvider->getTotalCount()) {
-            $this->runCsv();
+            switch ($this->_exportType) {
+                case self::FORMAT_EXCEL_X:
+                    $this->runStreamExport(Type::XLSX);
+                    break;
+                case self::FORMAT_CSV:
+                default:
+                $this->runStreamExport(Type::CSV);
+            }
         }
 
         $this->initPHPExcel();
@@ -674,6 +683,81 @@ class ExportMenu extends GridView
         fclose($fout);
         exit();
     }
+
+
+    public function runStreamExport($type)
+    {
+        $this->clearOutputBuffers();
+
+        $config = ArrayHelper::getValue($this->exportConfig, $this->_exportType, []);
+
+        $writer = WriterFactory::create($type);
+        $file = $this->filename;
+        $writer->openToBrowser($file);
+
+        /* @var $provider ActiveDataProvider */
+        $provider = $this->dataProvider;
+
+        $pagesCount = $provider->getTotalCount();
+        $provider->pagination->setPageSize($this->dowloadedPageSize);
+
+        foreach ($this->getVisibleColumns() as $column) {
+            $this->_endCol++;
+            /* @var $column Column */
+            $result[] = ($column instanceof \yii\grid\DataColumn) ? $this->getColumnHeader($column) : $column->header;
+        }
+
+        if (isset($result)) {
+            $writer->addRow($result);
+        }
+
+        for ($page = 0; $page < $pagesCount; ++$page) {
+            $provider->pagination->setPage($page);
+
+            $provider->prepare(true);
+            $models = $provider->getModels();
+
+            foreach ($models as $model) {
+
+                $key = $model->id;
+                $result = [];
+                foreach ($this->getVisibleColumns() as $index => $column) {
+                    if ($column instanceof \yii\grid\SerialColumn || $column instanceof \kartik\grid\SerialColumn) {
+                        $value = $column->renderDataCell($model, $key, $index);
+                    } elseif ($column instanceof \yii\grid\ActionColumn) {
+                        $value = '';
+                    } else {
+                        $format = $this->enableFormatter && isset($column->format) ? $column->format : 'raw';
+                        $value = ($column->content === null) ? (method_exists($column, 'getDataCellValue') ?
+                            $this->formatter->format($column->getDataCellValue($model, $key, $index), $format) :
+                            $column->renderDataCell($model, $key, $index)) :
+                            call_user_func($column->content, $model, $key, $index, $column);
+                    }
+                    if (empty($value) && !empty($column->attribute) && $column->attribute !== null) {
+                        $value = ArrayHelper::getValue($model, $column->attribute, '');
+                    }
+                    $result[] = strip_tags($value);
+                }
+
+                $writer->addRow($result);
+            }
+        }
+        $writer->close();
+
+        //вывод файла
+//        $this->setHttpHeaders();
+//        header('Content-Length: ' . filesize($file));
+//        if ($fd = fopen($file, 'rb')) {
+//            while (!feof($fd)) {
+//                print fread($fd, 1024);
+//            }
+//            fclose($fd);
+//        }
+
+        exit();
+    }
+
+
 
     /**
      * Clear output buffers
@@ -891,7 +975,7 @@ class ExportMenu extends GridView
             'downloadProgress' => Yii::t('kvexport', 'Generating the export file. Please wait...'),
             'downloadComplete' => Yii::t('kvexport',
                 'Request submitted! You may safely close this dialog after saving your downloaded file.'),
-            'tooMuchData' => Yii::t('kvexport', 'You try to get too much data, data available only in `CSV`.')
+            'tooMuchData' => ''
         ];
         $formId = $this->exportFormOptions['id'];
         $options = Json::encode([
