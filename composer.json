@@ -1,5 +1,5 @@
 {
-    "name": "kartik-v/yii2-export",
+    "name": "kartik-v/yii2-export-alt",
     "description": "A library to export server/db data in various formats (e.g. excel, html, pdf, csv etc.)",
     "keywords": ["yii2", "extension", "widget", "export", "spreadsheet", "html", "csv", "text", "pdf", "json", "xls", "xlsx", "OpenXML"],
     "homepage": "https://github.com/kartik-v/yii2-export",
